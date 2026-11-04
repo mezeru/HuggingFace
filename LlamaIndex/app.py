@@ -7,7 +7,13 @@ from llama_index.core.ingestion import IngestionPipeline
 from llama_index.core import VectorStoreIndex
 from llama_index.llms.huggingface_api import HuggingFaceInferenceAPI
 from llama_index.core import SimpleDirectoryReader
-
+from llama_index.core.agent import AgentWorkflow
+from llama_index.core.agent.workflow import (
+    AgentWorkflow,
+    FunctionAgent,
+    ReActAgent
+)
+from llama_index.core.tools import QueryEngineTool
 
 
 
@@ -39,15 +45,49 @@ if chroma_collections.count() == 0:
 
 index = VectorStoreIndex.from_vector_store(vector_store, embed_model=embed_model)
 
+
 llm = HuggingFaceInferenceAPI(model_name="Qwen/Qwen2.5-Coder-32B-Instruct")
 query_engine = index.as_query_engine(
     llm=llm,
     response_mode='compact'
 )
 
-response = query_engine.query(
-    "Why use LlamaIndex instead of BM25?"
+query_engine_tool = QueryEngineTool.from_defaults(
+    query_engine=query_engine,
+    name="name",
+    description="a specific description",
+    return_direct=False,
 )
 
-print("\n=== LLM Response ===")
-print(response.response)
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
+
+
+def subtract(a: int, b: int) -> int:
+    """Subtract two numbers."""
+    return a - b
+
+
+calculate_agent = ReActAgent(
+    name="Calculator Agent",
+    description="Performs Basic Arithmetic Calculatins",
+    system_prompt="You are a calculator assistant. Use your tools for any math operation.",
+    llm=llm
+    tools=[add,subtract]
+)
+
+query_agent = ReActAgent(
+    name="info_lookup",
+    description="Looks up information about XYZ",
+    system_prompt="Use your tool to query a RAG system to answer information about XYZ",
+    tools=[query_engine_tool],
+    llm=llm
+)
+
+query_engine_agent = AgentWorkflow(
+    agents=[calculate_agent,query_agent],
+    root_agent="calculator"
+)
+
+
